@@ -1,0 +1,51 @@
+// Paste into the browser console. Call it like: gPaste('site:github.com django settings', true)
+(function(){
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function waitForInput(timeout=10000){
+    const sels = ['textarea[name="q"]','input[name="q"]','input[aria-label="Search"]'];
+    const t0 = performance.now();
+    while (performance.now() - t0 < timeout){
+      for (const s of sels){
+        const el = document.querySelector(s);
+        if (el) return el;
+      }
+      await sleep(100);
+    }
+    return null;
+  }
+
+  // Expose a reusable function
+  window.gPaste = async function(query, submit=false){
+    if (!query) { console.warn('Provide a query string.'); return; }
+
+    // If not on Google, navigate directly so the query appears in the box on the results page
+    if (!/\/\/(www\.)?google\.[^/]+\/(search|)/.test(location.href)) {
+      location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+      return;
+    }
+
+    const input = await waitForInput();
+    if (!input) { console.warn('Search input not found.'); return; }
+
+    input.focus();
+    // Clear then type
+    input.value = '';
+    input.dispatchEvent(new InputEvent('input', {bubbles:true}));
+    await sleep(50);
+    input.value = query;
+    input.dispatchEvent(new InputEvent('input', {bubbles:true}));
+
+    if (submit) {
+      const press = (type, key, code, keyCode) =>
+        input.dispatchEvent(new KeyboardEvent(type, {key, code, keyCode, which:keyCode, bubbles:true}));
+      await sleep(60);
+      press('keydown','Enter','Enter',13);
+      press('keyup','Enter','Enter',13);
+    }
+    console.log('✅ Query placed in the search field:', query, submit ? '(submitted)' : '(not submitted)');
+  };
+
+  console.log("Ready. Use: gPaste('your text', /* submit? */ false)");
+})();
+
+gPaste('site:docs.djangoproject.com settings SECURITY', true); // fills and submits

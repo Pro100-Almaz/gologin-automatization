@@ -1,0 +1,75 @@
+(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const waitFor = async (sel, timeout=10000) => {
+    const t0 = performance.now();
+    while (performance.now() - t0 < timeout) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+      await sleep(100);
+    }
+    throw new Error('Timeout waiting for ' + sel);
+  };
+
+  const q = prompt('Enter place to search:');
+  if (!q) return;
+
+  // Ensure we're on Google Maps
+  if (!/google\.[^/]+\/maps/.test(location.href)) {
+    window.open('https://www.google.com/maps', '_blank');
+    console.log('Opened Google Maps in a new tab — paste this script there.');
+    return;
+  }
+
+  const input = await waitFor('input#searchboxinput, input[aria-label="Search Google Maps"]');
+  const prevHref = location.href;
+
+  // Type the query
+  input.focus();
+  input.value = '';
+  input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await sleep(50);
+  input.value = q;
+  input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await sleep(400); // let suggestions appear
+
+  // Select FIRST suggestion: ArrowDown → Enter
+  const sendKey = (type, key, code, keyCode) =>
+    input.dispatchEvent(new KeyboardEvent(type, { key, code, keyCode, which: keyCode, bubbles: true }));
+
+  sendKey('keydown', 'ArrowDown', 'ArrowDown', 40);
+  sendKey('keyup',   'ArrowDown', 'ArrowDown', 40);
+  await sleep(60);
+  sendKey('keydown', 'Enter', 'Enter', 13);
+  sendKey('keyup',   'Enter', 'Enter', 13);
+
+  // Wait for navigation / URL change
+  const waitUrl = async (timeout=15000) => {
+    const t0 = performance.now();
+    while (performance.now() - t0 < timeout) {
+      if (location.href !== prevHref && /\/maps\/place|@/.test(location.href)) return location.href;
+      await sleep(200);
+    }
+    return null;
+  };
+
+  let url = await waitUrl();
+
+  // Fallback: click the search button, then wait again
+  if (!url) {
+    const btn = document.querySelector('#searchbox-searchbutton, button[aria-label="Search"]');
+    if (btn) { btn.click(); url = await waitUrl(15000); }
+  }
+
+  if (url) {
+    console.log('First suggestion URL:', url);
+    try {
+      await navigator.clipboard.writeText(url);
+      console.log('✅ Copied to clipboard.');
+    } catch (e) {
+      console.warn('URL ready, but clipboard copy was blocked by the browser:', e);
+    }
+  } else {
+    console.warn('⚠️ Could not resolve a suggestion URL — the Maps UI may have changed.');
+  }
+})();
+
